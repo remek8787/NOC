@@ -1,4 +1,4 @@
-DirectoryIndex index.html index.htm
+DirectoryIndex index.php index.html index.htm
 Options -Indexes
 <IfModule mod_rewrite.c>
 RewriteEngine Off
