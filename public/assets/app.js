@@ -1,3 +1,4 @@
+window.addEventListener('error', function(e){ var root=document.getElementById('appRoot'); if(root && !root.innerHTML.trim()){ root.innerHTML='<div style="padding:24px;color:#fff;font-family:sans-serif"><h2>NOC App error</h2><p>Frontend gagal render: '+ (e.message || 'unknown error') +'</p></div>'; }});
 const STORAGE_KEY = 'noc_app_data_v1';
 const SESSION_KEY = 'noc_admin_session_v1';
 const DEFAULT_USERNAME = 'admin';
@@ -22,20 +23,30 @@ const defaultData = {
 
 function uid(){ return 'id-' + Math.random().toString(36).slice(2,10) + Date.now().toString(36); }
 function nowText(){ return new Date().toLocaleString('id-ID'); }
-async function sha256(text){
-  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
-  return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
+function simpleHash(text){
+  text = String(text || '');
+  let h1 = 0xdeadbeef ^ text.length;
+  let h2 = 0x41c6ce57 ^ text.length;
+  for(let i=0;i<text.length;i++){
+    const ch = text.charCodeAt(i);
+    h1 = Math.imul(h1 ^ ch, 2654435761);
+    h2 = Math.imul(h2 ^ ch, 1597334677);
+  }
+  h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+  h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+  return ((h2 >>> 0).toString(16).padStart(8,'0') + (h1 >>> 0).toString(16).padStart(8,'0'));
 }
+function deepClone(obj){ return JSON.parse(JSON.stringify(obj)); }
 async function ensureData(){
   let data = loadData();
   if(!data){
-    data = structuredClone(defaultData);
-    data.auth.passwordHash = await sha256(DEFAULT_PASSWORD);
+    data = deepClone(defaultData);
+    data.auth.passwordHash = simpleHash(DEFAULT_PASSWORD);
     saveData(data);
-  } else if(!data.auth?.passwordHash){
+  } else if(!data.auth || !data.auth.passwordHash){
     data.auth = data.auth || {};
     data.auth.username = data.auth.username || DEFAULT_USERNAME;
-    data.auth.passwordHash = await sha256(DEFAULT_PASSWORD);
+    data.auth.passwordHash = simpleHash(DEFAULT_PASSWORD);
     saveData(data);
   }
   return data;
@@ -72,7 +83,7 @@ function bindLogin(){
     const user = document.getElementById('loginUsername').value.trim();
     const pass = document.getElementById('loginPassword').value;
     const err = document.getElementById('loginError');
-    const hash = await sha256(pass);
+    const hash = simpleHash(pass);
     if(user !== (state.auth.username || DEFAULT_USERNAME) || hash !== state.auth.passwordHash){
       err.textContent = 'Username atau password salah.';
       err.classList.remove('d-none');
@@ -344,20 +355,20 @@ function bindSettings(){
     const newPass = document.getElementById('newPassword').value;
     const confirmPass = document.getElementById('confirmPassword').value;
     const alertBox = document.getElementById('passwordAlert');
-    if(await sha256(oldPass) !== state.auth.passwordHash){
+    if(simpleHash(oldPass) !== state.auth.passwordHash){
       alertBox.innerHTML = `<div class="alert alert-danger mb-0">Password lama salah.</div>`; return;
     }
     if(newPass.length < 4){ alertBox.innerHTML = `<div class="alert alert-warning mb-0">Password baru minimal 4 karakter.</div>`; return; }
     if(newPass !== confirmPass){ alertBox.innerHTML = `<div class="alert alert-warning mb-0">Konfirmasi password tidak sama.</div>`; return; }
-    state.auth.passwordHash = await sha256(newPass);
+    state.auth.passwordHash = simpleHash(newPass);
     saveData(state);
     alertBox.innerHTML = `<div class="alert alert-success mb-0">Password admin berhasil diubah.</div>`;
     document.getElementById('passwordForm').reset();
   });
   document.getElementById('resetDemoDataBtn').onclick = async () => {
     if(!confirm('Reset ke data awal demo?')) return;
-    state = structuredClone(defaultData);
-    state.auth.passwordHash = await sha256(DEFAULT_PASSWORD);
+    state = deepClone(defaultData);
+    state.auth.passwordHash = simpleHash(DEFAULT_PASSWORD);
     saveData(state);
     renderApp();
   };
@@ -384,7 +395,7 @@ function bindTopbar(){
       const json = JSON.parse(await file.text());
       if(!json.devices || !json.auth) throw new Error('Format tidak valid');
       state = json;
-      if(!state.auth.passwordHash) state.auth.passwordHash = await sha256(DEFAULT_PASSWORD);
+      if(!state.auth.passwordHash) state.auth.passwordHash = simpleHash(DEFAULT_PASSWORD);
       saveData(state);
       renderApp();
     } catch(err){ alert('Import gagal: ' + err.message); }
