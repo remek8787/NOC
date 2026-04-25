@@ -7,6 +7,7 @@ define('DEFAULT_PASSWORD', '260200');
 define('APP_NAME', 'NOC ISP Tools');
 
 date_default_timezone_set('Asia/Jakarta');
+if (file_exists(__DIR__ . '/lib/routeros_api.class.php')) { require_once __DIR__ . '/lib/routeros_api.class.php'; }
 
 function now_iso() { return date('c'); }
 function now_text() { return date('d M Y H:i:s'); }
@@ -56,6 +57,8 @@ function seed_data() {
                 'snmp_port' => '161',
                 'snmp_version' => '2c',
                 'api_username' => 'Robot',
+                'api_password' => '',
+                'api_timeout' => '5',
                 'status' => 'up',
                 'role' => 'Border / BGP',
                 'tags' => 'mikrotik,bgp,core,api,snmp',
@@ -81,6 +84,8 @@ function seed_data() {
                 'snmp_port' => '1500',
                 'snmp_version' => '2c',
                 'api_username' => '',
+                'api_password' => '',
+                'api_timeout' => '5',
                 'status' => 'warning',
                 'role' => 'GPON / OLT',
                 'tags' => 'zte,c320,c300,olt,snmp,gpon',
@@ -118,6 +123,7 @@ function seed_data() {
             ]
         ],
         'route_queries' => [],
+        'tool_logs' => [],
         'toolkits' => [
             ['name' => 'Port Reachability Probe', 'scope' => 'API / API SSL / SNMP', 'status' => 'ready'],
             ['name' => 'Device Detail Page', 'scope' => 'MikroTik + ZTE OLT', 'status' => 'ready'],
@@ -188,6 +194,70 @@ function run_port_probe($host, $port, $label) {
     return $result;
 }
 
+
+function normalize_ros_rows($rows, $limit = 80) {
+    if (!is_array($rows)) return [];
+    $out = [];
+    foreach ($rows as $row) {
+        if (!is_array($row)) continue;
+        $clean = [];
+        foreach ($row as $k => $v) {
+            if (is_scalar($v) || $v === null) $clean[(string)$k] = (string)$v;
+        }
+        $out[] = $clean;
+        if (count($out) >= $limit) break;
+    }
+    return $out;
+}
+
+function mikrotik_api_call($device, $command, $args = []) {
+    if (!class_exists('RouterosAPI')) {
+        return ['ok' => false, 'message' => 'RouterOS API library tidak tersedia di hosting.', 'rows' => []];
+    }
+    $host = getv($device, 'host');
+    $port = getv($device, 'api_port');
+    $user = getv($device, 'api_username');
+    $pass = getv($device, 'api_password');
+    $timeout = (int)getv($device, 'api_timeout', '5');
+    if ($host === '' || $port === '' || $user === '') {
+        return ['ok' => false, 'message' => 'Host/API port/API username belum lengkap.', 'rows' => []];
+    }
+    if ($pass === '') {
+        return ['ok' => false, 'message' => 'API password belum diisi pada device. Isi dulu di form device.', 'rows' => []];
+    }
+    $api = new RouterosAPI();
+    $api->debug = false;
+    $api->port = (int)$port;
+    $api->timeout = $timeout > 0 ? $timeout : 5;
+    $api->attempts = 1;
+    $api->delay = 1;
+    try {
+        if (!$api->connect($host, $user, $pass)) {
+            return ['ok' => false, 'message' => 'Gagal konek ke MikroTik API. Cek host, port, user, password, dan firewall/allowed address.', 'rows' => []];
+        }
+        $rows = $api->comm($command, $args);
+        $api->disconnect();
+        return ['ok' => true, 'message' => 'Command berhasil: ' . $command, 'rows' => normalize_ros_rows($rows, 120)];
+    } catch (Throwable $e) {
+        return ['ok' => false, 'message' => 'Exception: ' . $e->getMessage(), 'rows' => []];
+    } catch (Exception $e) {
+        return ['ok' => false, 'message' => 'Exception: ' . $e->getMessage(), 'rows' => []];
+    }
+}
+
+function find_device_by_name($data, $name) {
+    foreach (getv($data, 'devices', []) as $device) {
+        if (getv($device, 'name') === $name) return $device;
+    }
+    return null;
+}
+
+function tool_log_push(&$data, $entry) {
+    if (!isset($data['tool_logs']) || !is_array($data['tool_logs'])) $data['tool_logs'] = [];
+    array_unshift($data['tool_logs'], array_merge(['id' => uid('tool'), 'created_at' => now_iso()], $entry));
+    $data['tool_logs'] = array_slice($data['tool_logs'], 0, 120);
+}
+
 $data = app_load();
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -233,6 +303,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'snmp_port' => post('snmp_port'),
             'snmp_version' => post('snmp_version'),
             'api_username' => post('api_username'),
+            'api_password' => post('api_password'),
+            'api_timeout' => post('api_timeout', '5'),
             'status' => post('status', 'up'),
             'role' => post('role'),
             'tags' => post('tags'),
@@ -362,6 +434,55 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         redirect_to('routes');
     }
 
+
+    if ($action === 'mikrotik_tool') {
+        $deviceName = post('device_name');
+        $tool = post('tool');
+        $device = find_device_by_name($data, $deviceName);
+        if (!$device) { flash('danger', 'Device tidak ditemukan.'); redirect_to('tools'); }
+        if (strtolower(getv($device, 'vendor')) !== 'mikrotik') { flash('danger', 'Tool ini fokus untuk MikroTik. Pilih device MikroTik.'); redirect_to('tools'); }
+        $command = '';
+        $args = [];
+        $label = '';
+        if ($tool === 'ping') {
+            $address = post('address');
+            if ($address === '') { flash('danger', 'Alamat ping wajib diisi.'); redirect_to('tools'); }
+            $command = '/ping';
+            $args = ['address' => $address, 'count' => post('count', '4')];
+            $label = 'Ping ' . $address;
+        } elseif ($tool === 'interfaces') {
+            $command = '/interface/print';
+            $args = [];
+            $label = 'Interface List';
+        } elseif ($tool === 'ppp_secrets') {
+            $command = '/ppp/secret/print';
+            $args = [];
+            $label = 'PPP Secret List';
+        } elseif ($tool === 'ip_addresses') {
+            $command = '/ip/address/print';
+            $args = [];
+            $label = 'IP Address List';
+        } elseif ($tool === 'routes') {
+            $command = '/ip/route/print';
+            $args = [];
+            $label = 'IP Route List';
+        } else {
+            flash('danger', 'Tool tidak dikenal.'); redirect_to('tools');
+        }
+        $result = mikrotik_api_call($device, $command, $args);
+        tool_log_push($data, [
+            'device_name' => $deviceName,
+            'tool' => $tool,
+            'label' => $label,
+            'status' => $result['ok'] ? 'success' : 'failed',
+            'message' => $result['message'],
+            'rows' => $result['rows'],
+        ]);
+        app_save($data);
+        flash($result['ok'] ? 'success' : 'danger', $result['message']);
+        redirect_to('tools');
+    }
+
     if ($action === 'change_password') {
         $old = post('old_password');
         $new = post('new_password');
@@ -384,6 +505,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
+
 $data = app_load();
 $flash = get_flash();
 $tab = isset($_GET['tab']) ? (string)$_GET['tab'] : (is_logged_in() ? 'dashboard' : 'login');
@@ -397,6 +519,7 @@ $backupJobs = getv($data, 'backup_jobs', []);
 $routeQueries = getv($data, 'route_queries', []);
 $probeLogs = getv($data, 'probe_logs', []);
 $toolkits = getv($data, 'toolkits', []);
+$toolLogs = getv($data, 'tool_logs', []);
 
 if ($q !== '') {
     $devices = array_values(array_filter($devices, function ($d) use ($q) {
@@ -501,6 +624,7 @@ $downCount = count(array_filter(getv($data, 'devices', []), function($d){ return
           <div class="nav nav-pills flex-column gap-2">
             <a class="nav-link <?= $tab==='dashboard'?'active':'' ?>" href="?tab=dashboard"><i class="bi bi-speedometer2 me-2"></i>Dashboard</a>
             <a class="nav-link <?= $tab==='devices'?'active':'' ?>" href="?tab=devices"><i class="bi bi-hdd-network me-2"></i>Devices</a>
+            <a class="nav-link <?= $tab==='tools'?'active':'' ?>" href="?tab=tools"><i class="bi bi-terminal me-2"></i>MikroTik Tools</a>
             <a class="nav-link <?= $tab==='bgp'?'active':'' ?>" href="?tab=bgp"><i class="bi bi-diagram-3 me-2"></i>BGP</a>
             <a class="nav-link <?= $tab==='routes'?'active':'' ?>" href="?tab=routes"><i class="bi bi-signpost-split me-2"></i>Routes</a>
             <a class="nav-link <?= $tab==='backups'?'active':'' ?>" href="?tab=backups"><i class="bi bi-cloud-arrow-down me-2"></i>Backups</a>
@@ -626,6 +750,8 @@ $downCount = count(array_filter(getv($data, 'devices', []), function($d){ return
                     <div class="col-md-4"><label class="form-label">SNMP Port</label><input name="snmp_port" class="form-control" value="<?= e(getv($editDevice,'snmp_port')) ?>"></div>
                     <div class="col-md-6"><label class="form-label">SNMP Version</label><input name="snmp_version" class="form-control" value="<?= e(getv($editDevice,'snmp_version','2c')) ?>"></div>
                     <div class="col-md-6"><label class="form-label">API Username</label><input name="api_username" class="form-control" value="<?= e(getv($editDevice,'api_username')) ?>"></div>
+                    <div class="col-md-6"><label class="form-label">API Password</label><input name="api_password" type="password" class="form-control" value="<?= e(getv($editDevice,'api_password')) ?>" placeholder="isi untuk tool real"></div>
+                    <div class="col-md-6"><label class="form-label">API Timeout</label><input name="api_timeout" class="form-control" value="<?= e(getv($editDevice,'api_timeout','5')) ?>"></div>
                     <div class="col-md-6"><label class="form-label">Status</label><select name="status" class="form-select"><?php foreach (['up','warning','down'] as $opt): ?><option value="<?= e($opt) ?>" <?= getv($editDevice,'status','up')===$opt?'selected':'' ?>><?= e(status_text($opt)) ?></option><?php endforeach; ?></select></div>
                     <div class="col-md-6"><label class="form-label">Tags</label><input name="tags" class="form-control" value="<?= e(getv($editDevice,'tags')) ?>"></div>
                     <div class="col-12"><label class="form-label">Fitur / kapabilitas (1 baris 1 fitur)</label><textarea name="features" rows="4" class="form-control"><?= e(implode("\n", is_array(getv($editDevice,'features',[])) ? getv($editDevice,'features',[]) : [])) ?></textarea></div>
@@ -735,6 +861,83 @@ $downCount = count(array_filter(getv($data, 'devices', []), function($d){ return
                 <?php endforeach; ?>
                 <?php if (!$probeLogs): ?><tr><td colspan="4" class="muted">Belum ada probe log.</td></tr><?php endif; ?>
               </tbody></table></div>
+            </div>
+
+
+          <?php elseif ($tab === 'tools'): ?>
+            <div class="row g-3">
+              <div class="col-12 col-xl-4">
+                <div class="app-card rounded-4 p-3 h-100">
+                  <div class="kicker mb-2">MikroTik live tools</div>
+                  <h3 class="h5 mb-3">Winbox-style Web Tools</h3>
+                  <form method="post" class="vstack gap-3">
+                    <input type="hidden" name="action" value="mikrotik_tool">
+                    <div>
+                      <label class="form-label">Device MikroTik</label>
+                      <select name="device_name" class="form-select">
+                        <?php foreach (getv($data,'devices',[]) as $device): ?>
+                          <?php if (strtolower(getv($device,'vendor')) === 'mikrotik'): ?>
+                            <option value="<?= e(getv($device,'name')) ?>"><?= e(getv($device,'name')) ?> — <?= e(getv($device,'host')) ?></option>
+                          <?php endif; ?>
+                        <?php endforeach; ?>
+                      </select>
+                    </div>
+                    <div>
+                      <label class="form-label">Tool</label>
+                      <select name="tool" class="form-select" id="toolSelect" onchange="document.getElementById('pingFields').style.display=this.value==='ping'?'block':'none'">
+                        <option value="ping">Cek Ping</option>
+                        <option value="interfaces">Cek Interface</option>
+                        <option value="ppp_secrets">Cek PPP Secret</option>
+                        <option value="ip_addresses">Cek IP Address</option>
+                        <option value="routes">Cek IP Routes</option>
+                      </select>
+                    </div>
+                    <div id="pingFields">
+                      <label class="form-label">Target Ping</label>
+                      <input name="address" class="form-control" placeholder="8.8.8.8 / gateway / IP pelanggan">
+                      <label class="form-label mt-2">Count</label>
+                      <input name="count" class="form-control" value="4">
+                    </div>
+                    <button class="btn btn-info"><i class="bi bi-play-circle me-2"></i>Jalankan Tool</button>
+                  </form>
+                  <div class="alert alert-info small mt-3 mb-0">Agar 100% real, isi API Password di detail device MikroTik. Hosting akan connect langsung ke RouterOS API port device.</div>
+                </div>
+              </div>
+              <div class="col-12 col-xl-8">
+                <div class="app-card rounded-4 p-3 h-100">
+                  <div class="d-flex justify-content-between gap-2 flex-wrap mb-3">
+                    <div><div class="kicker">Tool result log</div><h3 class="h5 mb-0">Hasil command MikroTik</h3></div>
+                    <span class="badge badge-soft">Ping • Interface • PPP Secret • Routes</span>
+                  </div>
+                  <?php if (!$toolLogs): ?>
+                    <div class="muted">Belum ada hasil tool. Jalankan tool dari panel kiri.</div>
+                  <?php endif; ?>
+                  <?php foreach (array_slice($toolLogs, 0, 10) as $log): ?>
+                    <div class="toolkit-item mb-3">
+                      <div class="d-flex justify-content-between gap-2 flex-wrap align-items-start">
+                        <div>
+                          <strong><?= e(getv($log,'label')) ?></strong>
+                          <div class="small muted"><?= e(getv($log,'device_name')) ?> • <?= e(getv($log,'created_at')) ?></div>
+                        </div>
+                        <span class="badge <?= e(status_badge_class(getv($log,'status'))) ?>"><?= e(status_text(getv($log,'status'))) ?></span>
+                      </div>
+                      <div class="small muted mt-2"><?= e(getv($log,'message')) ?></div>
+                      <?php $rows = getv($log, 'rows', []); if (is_array($rows) && count($rows)): ?>
+                        <div class="table-responsive mt-3">
+                          <table class="table table-sm table-hover align-middle">
+                            <thead><tr>
+                              <?php $first = $rows[0]; $cols = array_slice(array_keys($first), 0, 8); foreach ($cols as $col): ?><th><?= e($col) ?></th><?php endforeach; ?>
+                            </tr></thead>
+                            <tbody>
+                              <?php foreach (array_slice($rows, 0, 30) as $row): ?><tr><?php foreach ($cols as $col): ?><td class="small"><?= e(getv($row,$col)) ?></td><?php endforeach; ?></tr><?php endforeach; ?>
+                            </tbody>
+                          </table>
+                        </div>
+                      <?php endif; ?>
+                    </div>
+                  <?php endforeach; ?>
+                </div>
+              </div>
             </div>
 
           <?php elseif ($tab === 'bgp'): ?>
