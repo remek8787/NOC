@@ -2,166 +2,365 @@
 <html lang="id">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>NOC Dashboard — Network Operation Control</title>
-  <meta name="description" content="Blueprint + MVP dashboard NOC berbasis web apps untuk monitoring device, BGP, route lookup, SNMP, dan backup konfigurasi." />
-  <meta name="theme-color" content="#08111f" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>NOC App — Admin Console</title>
+  <meta name="description" content="NOC web app untuk device registry, BGP, routes, backup config, dan admin control." />
+  <meta name="theme-color" content="#0b1220" />
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
   <link rel="stylesheet" href="./assets/styles.css" />
 </head>
 <body>
-  <div class="bg-grid"></div>
-  <header class="topbar">
-    <div>
-      <div class="eyebrow">noc.anantasatriya.my.id</div>
-      <h1>NOC Dashboard</h1>
-      <p class="lead">Network Operation Control berbasis web apps untuk monitoring perangkat, BGP, route lookup, SNMP, dan backup konfigurasi.</p>
+  <div id="appRoot" class="app-shell"></div>
+
+  <template id="loginTemplate">
+    <div class="container py-5">
+      <div class="row justify-content-center min-vh-100 align-items-center">
+        <div class="col-12 col-md-8 col-lg-5">
+          <div class="card glass-card border-0 shadow-lg">
+            <div class="card-body p-4 p-lg-5">
+              <div class="d-flex align-items-center gap-3 mb-4">
+                <div class="brand-icon"><i class="bi bi-router-fill"></i></div>
+                <div>
+                  <div class="text-uppercase small text-info-emphasis fw-bold brand-kicker">noc.anantasatriya.my.id</div>
+                  <h1 class="h3 mb-0 text-white">NOC Admin Login</h1>
+                </div>
+              </div>
+              <p class="text-secondary mb-4">Login admin untuk mengelola router/device, route lookup, BGP summary, dan backup center.</p>
+              <form id="loginForm" class="vstack gap-3">
+                <div>
+                  <label class="form-label text-light">Username</label>
+                  <input type="text" class="form-control form-control-lg" id="loginUsername" value="admin" required />
+                </div>
+                <div>
+                  <label class="form-label text-light">Password</label>
+                  <div class="input-group input-group-lg">
+                    <input type="password" class="form-control" id="loginPassword" placeholder="Masukkan password admin" required />
+                    <button class="btn btn-outline-light" type="button" id="togglePassword"><i class="bi bi-eye"></i></button>
+                  </div>
+                  <div class="form-text text-secondary">Password default saat ini: <strong class="text-warning">260200</strong> — nanti bisa diubah dari Settings.</div>
+                </div>
+                <button class="btn btn-info btn-lg fw-semibold" type="submit"><i class="bi bi-shield-lock me-2"></i>Masuk ke Dashboard</button>
+                <div id="loginError" class="alert alert-danger py-2 px-3 d-none mb-0"></div>
+              </form>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
-    <div class="top-actions">
-      <span class="badge success">MVP LIVE</span>
-      <span class="badge">Blueprint Ready</span>
-      <span class="badge">Multi-vendor Ready</span>
+  </template>
+
+  <template id="dashboardTemplate">
+    <div class="layout">
+      <aside class="sidebar">
+        <div>
+          <div class="d-flex align-items-center gap-3 mb-4">
+            <div class="brand-icon"><i class="bi bi-broadcast-pin"></i></div>
+            <div>
+              <div class="brand-kicker">NOC APP</div>
+              <div class="fw-bold text-white">Admin Console</div>
+            </div>
+          </div>
+          <div class="nav flex-column nav-pills gap-2" id="sidebarTabs">
+            <button class="nav-link active" data-tab="dashboard"><i class="bi bi-speedometer2 me-2"></i>Dashboard</button>
+            <button class="nav-link" data-tab="devices"><i class="bi bi-hdd-network me-2"></i>Devices</button>
+            <button class="nav-link" data-tab="bgp"><i class="bi bi-diagram-3 me-2"></i>BGP</button>
+            <button class="nav-link" data-tab="routes"><i class="bi bi-signpost-split me-2"></i>Routes</button>
+            <button class="nav-link" data-tab="backups"><i class="bi bi-cloud-arrow-down me-2"></i>Backups</button>
+            <button class="nav-link" data-tab="settings"><i class="bi bi-gear me-2"></i>Settings</button>
+          </div>
+        </div>
+        <div class="sidebar-footer">
+          <div class="small text-secondary mb-2">Status aplikasi</div>
+          <div class="badge text-bg-success">Ready</div>
+          <div class="badge text-bg-dark border mt-2">Local data persistence</div>
+        </div>
+      </aside>
+
+      <main class="main-pane">
+        <div class="topbar d-flex justify-content-between align-items-center gap-3 flex-wrap">
+          <div>
+            <div class="brand-kicker">Network Operation Control</div>
+            <h2 class="mb-1 text-white" id="pageTitle">Dashboard</h2>
+            <div class="text-secondary">Web app operasional untuk router, OLT, SNMP, BGP, route, dan backup konfigurasi.</div>
+          </div>
+          <div class="d-flex gap-2 flex-wrap align-items-center">
+            <button class="btn btn-outline-light" id="exportDataBtn"><i class="bi bi-download me-2"></i>Export JSON</button>
+            <label class="btn btn-outline-light mb-0">
+              <i class="bi bi-upload me-2"></i>Import JSON
+              <input type="file" id="importDataInput" accept="application/json" hidden>
+            </label>
+            <button class="btn btn-danger" id="logoutBtn"><i class="bi bi-box-arrow-right me-2"></i>Logout</button>
+          </div>
+        </div>
+
+        <section class="tab-panel active" data-panel="dashboard">
+          <div class="row g-3 mb-4" id="summaryCards"></div>
+          <div class="row g-3">
+            <div class="col-12 col-xl-7">
+              <div class="card glass-card h-100 border-0">
+                <div class="card-body">
+                  <div class="d-flex justify-content-between align-items-center mb-3">
+                    <div>
+                      <div class="section-kicker">Overview</div>
+                      <h3 class="h5 text-white mb-0">Device health ringkas</h3>
+                    </div>
+                  </div>
+                  <div id="dashboardDeviceList" class="list-stack"></div>
+                </div>
+              </div>
+            </div>
+            <div class="col-12 col-xl-5">
+              <div class="card glass-card h-100 border-0">
+                <div class="card-body">
+                  <div class="section-kicker">Roadmap</div>
+                  <h3 class="h5 text-white">Arah build berikutnya</h3>
+                  <div class="timeline-stack">
+                    <div class="timeline-item done"><strong>Phase 1</strong><span>MVP admin app live</span></div>
+                    <div class="timeline-item active"><strong>Phase 2</strong><span>CRUD device + settings + persistence</span></div>
+                    <div class="timeline-item"><strong>Phase 3</strong><span>Backend sync / collector</span></div>
+                    <div class="timeline-item"><strong>Phase 4</strong><span>Real MikroTik API / BGP / routes / backup</span></div>
+                    <div class="timeline-item"><strong>Phase 5</strong><span>SNMP & OLT adapters</span></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="tab-panel" data-panel="devices">
+          <div class="row g-3">
+            <div class="col-12 col-xl-5">
+              <div class="card glass-card border-0 h-100">
+                <div class="card-body">
+                  <div class="section-kicker">Form device</div>
+                  <h3 class="h5 text-white">Tambah / edit router</h3>
+                  <form id="deviceForm" class="row g-3 mt-1">
+                    <input type="hidden" id="deviceId" />
+                    <div class="col-md-6">
+                      <label class="form-label">Nama Device</label>
+                      <input class="form-control" id="deviceName" required>
+                    </div>
+                    <div class="col-md-6">
+                      <label class="form-label">Vendor</label>
+                      <input class="form-control" id="deviceVendor" placeholder="MikroTik / ZTE / Cisco" required>
+                    </div>
+                    <div class="col-md-6">
+                      <label class="form-label">Tipe</label>
+                      <input class="form-control" id="deviceType" placeholder="Router / OLT / Switch" required>
+                    </div>
+                    <div class="col-md-6">
+                      <label class="form-label">Lokasi / Site</label>
+                      <input class="form-control" id="deviceSite" placeholder="POP / Core / NOC Rack">
+                    </div>
+                    <div class="col-md-6">
+                      <label class="form-label">Host / IP</label>
+                      <input class="form-control" id="deviceHost" placeholder="103.196.xxx.xxx">
+                    </div>
+                    <div class="col-md-6">
+                      <label class="form-label">Mode Koneksi</label>
+                      <select class="form-select" id="deviceMode">
+                        <option>API+SNMP</option>
+                        <option>API</option>
+                        <option>SNMP</option>
+                        <option>SNMP/CLI</option>
+                        <option>SSH/CLI</option>
+                        <option>Hybrid</option>
+                      </select>
+                    </div>
+                    <div class="col-md-4">
+                      <label class="form-label">API Port</label>
+                      <input type="number" class="form-control" id="deviceApiPort" placeholder="8728">
+                    </div>
+                    <div class="col-md-4">
+                      <label class="form-label">SNMP Port</label>
+                      <input type="number" class="form-control" id="deviceSnmpPort" placeholder="161">
+                    </div>
+                    <div class="col-md-4">
+                      <label class="form-label">Status</label>
+                      <select class="form-select" id="deviceStatus">
+                        <option value="up">UP</option>
+                        <option value="warning">Warning</option>
+                        <option value="down">Down</option>
+                      </select>
+                    </div>
+                    <div class="col-md-6">
+                      <label class="form-label">Username/API User</label>
+                      <input class="form-control" id="deviceUsername" placeholder="ops-user">
+                    </div>
+                    <div class="col-md-6">
+                      <label class="form-label">Tag</label>
+                      <input class="form-control" id="deviceTag" placeholder="core, bgp, olt, pop">
+                    </div>
+                    <div class="col-12">
+                      <label class="form-label">Catatan</label>
+                      <textarea class="form-control" id="deviceNotes" rows="3" placeholder="catatan custom per router/device"></textarea>
+                    </div>
+                    <div class="col-12 d-flex gap-2 flex-wrap">
+                      <button class="btn btn-info" type="submit"><i class="bi bi-save me-2"></i>Simpan Device</button>
+                      <button class="btn btn-outline-light" type="button" id="resetDeviceForm"><i class="bi bi-arrow-counterclockwise me-2"></i>Reset</button>
+                    </div>
+                  </form>
+                </div>
+              </div>
+            </div>
+            <div class="col-12 col-xl-7">
+              <div class="card glass-card border-0 h-100">
+                <div class="card-body">
+                  <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+                    <div>
+                      <div class="section-kicker">Device registry</div>
+                      <h3 class="h5 text-white mb-0">Daftar router / device</h3>
+                    </div>
+                    <input class="form-control search-box" id="deviceSearch" placeholder="Cari device, vendor, host, tag...">
+                  </div>
+                  <div id="deviceTableWrap"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="tab-panel" data-panel="bgp">
+          <div class="card glass-card border-0">
+            <div class="card-body">
+              <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+                <div>
+                  <div class="section-kicker">BGP panel</div>
+                  <h3 class="h5 text-white mb-0">Ringkasan peer BGP</h3>
+                </div>
+                <button class="btn btn-outline-light btn-sm" id="seedBgpBtn"><i class="bi bi-stars me-2"></i>Isi contoh BGP</button>
+              </div>
+              <div id="bgpTableWrap"></div>
+            </div>
+          </div>
+        </section>
+
+        <section class="tab-panel" data-panel="routes">
+          <div class="row g-3">
+            <div class="col-12 col-xl-5">
+              <div class="card glass-card border-0 h-100">
+                <div class="card-body">
+                  <div class="section-kicker">Route lookup</div>
+                  <h3 class="h5 text-white">Cari IP / prefix</h3>
+                  <form id="routeForm" class="vstack gap-3 mt-3">
+                    <div>
+                      <label class="form-label">Query</label>
+                      <input class="form-control" id="routeQuery" placeholder="contoh 8.8.8.8 atau 103.196.85.0/24" required>
+                    </div>
+                    <div>
+                      <label class="form-label">Target device</label>
+                      <select class="form-select" id="routeDeviceSelect"></select>
+                    </div>
+                    <button class="btn btn-info" type="submit"><i class="bi bi-search me-2"></i>Cari Route</button>
+                  </form>
+                </div>
+              </div>
+            </div>
+            <div class="col-12 col-xl-7">
+              <div class="card glass-card border-0 h-100">
+                <div class="card-body">
+                  <div class="section-kicker">Hasil</div>
+                  <h3 class="h5 text-white">Simulasi route explorer</h3>
+                  <div id="routeResult" class="result-panel mt-3">Belum ada query. Nanti modul ini akan menampilkan best-match route dari router terpilih.</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="tab-panel" data-panel="backups">
+          <div class="row g-3">
+            <div class="col-12 col-xl-4">
+              <div class="card glass-card border-0 h-100">
+                <div class="card-body">
+                  <div class="section-kicker">Backup config</div>
+                  <h3 class="h5 text-white">Jalankan backup manual</h3>
+                  <form id="backupForm" class="vstack gap-3 mt-3">
+                    <div>
+                      <label class="form-label">Target device</label>
+                      <select class="form-select" id="backupDeviceSelect"></select>
+                    </div>
+                    <div>
+                      <label class="form-label">Tipe backup</label>
+                      <select class="form-select" id="backupType">
+                        <option value="mikrotik-rsc">MikroTik .rsc</option>
+                        <option value="mikrotik-backup">MikroTik binary backup</option>
+                        <option value="olt-export">OLT export / dump</option>
+                        <option value="config-text">Config text / raw</option>
+                      </select>
+                    </div>
+                    <button class="btn btn-info" type="submit"><i class="bi bi-cloud-arrow-down me-2"></i>Tambah job backup</button>
+                  </form>
+                </div>
+              </div>
+            </div>
+            <div class="col-12 col-xl-8">
+              <div class="card glass-card border-0 h-100">
+                <div class="card-body">
+                  <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+                    <div>
+                      <div class="section-kicker">Backup center</div>
+                      <h3 class="h5 text-white mb-0">Riwayat backup</h3>
+                    </div>
+                    <button class="btn btn-outline-light btn-sm" id="seedBackupBtn"><i class="bi bi-database-add me-2"></i>Isi contoh backup</button>
+                  </div>
+                  <div id="backupTableWrap"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="tab-panel" data-panel="settings">
+          <div class="row g-3">
+            <div class="col-12 col-xl-6">
+              <div class="card glass-card border-0 h-100">
+                <div class="card-body">
+                  <div class="section-kicker">Security</div>
+                  <h3 class="h5 text-white">Ubah password admin</h3>
+                  <form id="passwordForm" class="vstack gap-3 mt-3">
+                    <div>
+                      <label class="form-label">Password lama</label>
+                      <input class="form-control" type="password" id="oldPassword" required>
+                    </div>
+                    <div>
+                      <label class="form-label">Password baru</label>
+                      <input class="form-control" type="password" id="newPassword" required>
+                    </div>
+                    <div>
+                      <label class="form-label">Konfirmasi password baru</label>
+                      <input class="form-control" type="password" id="confirmPassword" required>
+                    </div>
+                    <button class="btn btn-info" type="submit"><i class="bi bi-key me-2"></i>Update password</button>
+                    <div id="passwordAlert"></div>
+                  </form>
+                </div>
+              </div>
+            </div>
+            <div class="col-12 col-xl-6">
+              <div class="card glass-card border-0 h-100">
+                <div class="card-body">
+                  <div class="section-kicker">App settings</div>
+                  <h3 class="h5 text-white">Info aplikasi</h3>
+                  <div class="settings-list mt-3">
+                    <div class="setting-item"><strong>Storage mode</strong><span>Local browser persistence (siap disync backend nanti)</span></div>
+                    <div class="setting-item"><strong>Default admin</strong><span>username: <code>admin</code></span></div>
+                    <div class="setting-item"><strong>Backend sync</strong><span>Belum aktif — struktur data sudah siap untuk next phase</span></div>
+                    <div class="setting-item"><strong>Integrasi target</strong><span>MikroTik API, SNMP, BGP, route lookup, backup config, OLT adapter</span></div>
+                  </div>
+                  <div class="d-flex gap-2 flex-wrap mt-4">
+                    <button class="btn btn-outline-warning" id="resetDemoDataBtn"><i class="bi bi-arrow-repeat me-2"></i>Reset ke data awal</button>
+                    <button class="btn btn-outline-danger" id="clearAllDataBtn"><i class="bi bi-trash3 me-2"></i>Hapus semua data device</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+      </main>
     </div>
-  </header>
-
-  <main class="container">
-    <section class="hero-card">
-      <div>
-        <div class="section-kicker">Scope utama</div>
-        <h2>Panel operasional NOC yang nanti bisa nyambung ke MikroTik, OLT, SNMP, API, backup config, BGP, dan route explorer.</h2>
-        <p>Versi ini adalah <strong>MVP live shell</strong> untuk mematangkan struktur dashboard, modul, dan arah arsitektur. Setelah Tuan Besar review, kita lanjut isi koneksi real device satu per satu.</p>
-      </div>
-      <div class="hero-grid">
-        <div class="mini-card"><strong>Device Registry</strong><span>router / OLT / switch / AP / node</span></div>
-        <div class="mini-card"><strong>Connectivity</strong><span>API, SNMP, SSH/CLI, hybrid</span></div>
-        <div class="mini-card"><strong>Operations</strong><span>BGP, routes, backup, polling</span></div>
-        <div class="mini-card"><strong>Roadmap</strong><span>MVP → collector → real integrations</span></div>
-      </div>
-    </section>
-
-    <section class="stats" id="stats"></section>
-
-    <section class="grid two">
-      <article class="panel">
-        <div class="panel-head">
-          <div>
-            <div class="section-kicker">Arsitektur</div>
-            <h3>Blueprint komponen</h3>
-          </div>
-        </div>
-        <div class="stack-list">
-          <div class="stack-item"><strong>Frontend Dashboard</strong><span>Overview, device explorer, BGP, route finder, backup center, alerts</span></div>
-          <div class="stack-item"><strong>Backend/API</strong><span>Device registry, credential mapping, audit log, execution gateway</span></div>
-          <div class="stack-item"><strong>Collector Layer</strong><span>SNMP poller, MikroTik API connector, SSH/CLI worker, vendor adapters</span></div>
-          <div class="stack-item"><strong>Storage</strong><span>JSON / SQLite / MySQL + file storage backup config</span></div>
-        </div>
-      </article>
-
-      <article class="panel">
-        <div class="panel-head">
-          <div>
-            <div class="section-kicker">Fitur inti</div>
-            <h3>Yang akan dibangun</h3>
-          </div>
-        </div>
-        <div class="feature-grid">
-          <div class="feature"><strong>Multi-device</strong><span>tiap router/device punya API port & profile custom</span></div>
-          <div class="feature"><strong>SNMP</strong><span>polling generic + vendor-specific OID profile</span></div>
-          <div class="feature"><strong>MikroTik BGP</strong><span>peer state, prefix, summary, status</span></div>
-          <div class="feature"><strong>Route Finder</strong><span>cari IP/prefix dan lihat best-match route</span></div>
-          <div class="feature"><strong>Backup Config</strong><span>.rsc MikroTik + export OLT bila memungkinkan</span></div>
-          <div class="feature"><strong>Audit & Alerts</strong><span>log aksi operator dan status backup/polling</span></div>
-        </div>
-      </article>
-    </section>
-
-    <section class="grid two">
-      <article class="panel">
-        <div class="panel-head">
-          <div>
-            <div class="section-kicker">Device explorer</div>
-            <h3>Contoh daftar perangkat</h3>
-          </div>
-        </div>
-        <div id="deviceList" class="device-list"></div>
-      </article>
-
-      <article class="panel">
-        <div class="panel-head">
-          <div>
-            <div class="section-kicker">BGP summary</div>
-            <h3>Contoh panel peer BGP</h3>
-          </div>
-        </div>
-        <div id="bgpList" class="table-list"></div>
-      </article>
-    </section>
-
-    <section class="grid two">
-      <article class="panel">
-        <div class="panel-head">
-          <div>
-            <div class="section-kicker">Backup center</div>
-            <h3>Status backup konfigurasi</h3>
-          </div>
-        </div>
-        <div id="backupList" class="stack-list"></div>
-      </article>
-
-      <article class="panel">
-        <div class="panel-head">
-          <div>
-            <div class="section-kicker">Route explorer</div>
-            <h3>Flow pencarian route</h3>
-          </div>
-        </div>
-        <div class="route-box">
-          <label for="routeInput">Cari IP / prefix</label>
-          <div class="route-form">
-            <input id="routeInput" placeholder="Contoh: 103.196.85.0/24 atau 8.8.8.8" />
-            <button id="routeBtn">Simulasikan</button>
-          </div>
-          <div id="routeResult" class="result-card">Belum ada query. Nanti modul ini akan mencari route ke satu atau banyak router.</div>
-        </div>
-      </article>
-    </section>
-
-    <section class="panel">
-      <div class="panel-head">
-        <div>
-          <div class="section-kicker">Roadmap live build</div>
-          <h3>Tahapan pengerjaan yang realistis</h3>
-        </div>
-      </div>
-      <div class="timeline">
-        <div class="timeline-item done"><strong>Phase 1</strong><span>MVP dashboard shell live + blueprint</span></div>
-        <div class="timeline-item active"><strong>Phase 2</strong><span>Device registry + connector skeleton + profile koneksi</span></div>
-        <div class="timeline-item"><strong>Phase 3</strong><span>MikroTik real integration: API, BGP, route, backup .rsc</span></div>
-        <div class="timeline-item"><strong>Phase 4</strong><span>SNMP multi-vendor & OLT adapters</span></div>
-        <div class="timeline-item"><strong>Phase 5</strong><span>Alerting, audit log, scheduling, retention backup</span></div>
-      </div>
-    </section>
-
-    <section class="panel muted-panel">
-      <div class="panel-head">
-        <div>
-          <div class="section-kicker">Catatan engineering</div>
-          <h3>Prinsip desain</h3>
-        </div>
-      </div>
-      <ul class="bullet-list">
-        <li>Port API per router wajib configurable dari dashboard.</li>
-        <li>SNMP version / port / security profile juga wajib configurable per device.</li>
-        <li>Backup OLT harus modular per vendor, tidak boleh diasumsikan seragam.</li>
-        <li>Hosting web app bisa tetap di subdomain ini, sementara collector berat bisa jalan di VM terpisah jika dibutuhkan.</li>
-        <li>Target akhir: usable real untuk NOC, bukan sekadar mockup cantik.</li>
-      </ul>
-    </section>
-  </main>
-
-  <footer class="footer">
-    <span>NOC Dashboard MVP • Built for iterative live development</span>
-    <a href="./docs/blueprint-noc-dashboard.md" target="_blank" rel="noopener">Lihat blueprint markdown</a>
-  </footer>
+  </template>
 
   <script src="./assets/app.js"></script>
 </body>
