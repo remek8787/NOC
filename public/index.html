@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>NOC Dashboard — Network Operation Control</title>
+  <meta name="description" content="Blueprint + MVP dashboard NOC berbasis web apps untuk monitoring device, BGP, route lookup, SNMP, dan backup konfigurasi." />
+  <meta name="theme-color" content="#08111f" />
+  <link rel="stylesheet" href="./assets/styles.css" />
+</head>
+<body>
+  <div class="bg-grid"></div>
+  <header class="topbar">
+    <div>
+      <div class="eyebrow">noc.anantasatriya.my.id</div>
+      <h1>NOC Dashboard</h1>
+      <p class="lead">Network Operation Control berbasis web apps untuk monitoring perangkat, BGP, route lookup, SNMP, dan backup konfigurasi.</p>
+    </div>
+    <div class="top-actions">
+      <span class="badge success">MVP LIVE</span>
+      <span class="badge">Blueprint Ready</span>
+      <span class="badge">Multi-vendor Ready</span>
+    </div>
+  </header>
+
+  <main class="container">
+    <section class="hero-card">
+      <div>
+        <div class="section-kicker">Scope utama</div>
+        <h2>Panel operasional NOC yang nanti bisa nyambung ke MikroTik, OLT, SNMP, API, backup config, BGP, dan route explorer.</h2>
+        <p>Versi ini adalah <strong>MVP live shell</strong> untuk mematangkan struktur dashboard, modul, dan arah arsitektur. Setelah Tuan Besar review, kita lanjut isi koneksi real device satu per satu.</p>
+      </div>
+      <div class="hero-grid">
+        <div class="mini-card"><strong>Device Registry</strong><span>router / OLT / switch / AP / node</span></div>
+        <div class="mini-card"><strong>Connectivity</strong><span>API, SNMP, SSH/CLI, hybrid</span></div>
+        <div class="mini-card"><strong>Operations</strong><span>BGP, routes, backup, polling</span></div>
+        <div class="mini-card"><strong>Roadmap</strong><span>MVP → collector → real integrations</span></div>
+      </div>
+    </section>
+
+    <section class="stats" id="stats"></section>
+
+    <section class="grid two">
+      <article class="panel">
+        <div class="panel-head">
+          <div>
+            <div class="section-kicker">Arsitektur</div>
+            <h3>Blueprint komponen</h3>
+          </div>
+        </div>
+        <div class="stack-list">
+          <div class="stack-item"><strong>Frontend Dashboard</strong><span>Overview, device explorer, BGP, route finder, backup center, alerts</span></div>
+          <div class="stack-item"><strong>Backend/API</strong><span>Device registry, credential mapping, audit log, execution gateway</span></div>
+          <div class="stack-item"><strong>Collector Layer</strong><span>SNMP poller, MikroTik API connector, SSH/CLI worker, vendor adapters</span></div>
+          <div class="stack-item"><strong>Storage</strong><span>JSON / SQLite / MySQL + file storage backup config</span></div>
+        </div>
+      </article>
+
+      <article class="panel">
+        <div class="panel-head">
+          <div>
+            <div class="section-kicker">Fitur inti</div>
+            <h3>Yang akan dibangun</h3>
+          </div>
+        </div>
+        <div class="feature-grid">
+          <div class="feature"><strong>Multi-device</strong><span>tiap router/device punya API port & profile custom</span></div>
+          <div class="feature"><strong>SNMP</strong><span>polling generic + vendor-specific OID profile</span></div>
+          <div class="feature"><strong>MikroTik BGP</strong><span>peer state, prefix, summary, status</span></div>
+          <div class="feature"><strong>Route Finder</strong><span>cari IP/prefix dan lihat best-match route</span></div>
+          <div class="feature"><strong>Backup Config</strong><span>.rsc MikroTik + export OLT bila memungkinkan</span></div>
+          <div class="feature"><strong>Audit & Alerts</strong><span>log aksi operator dan status backup/polling</span></div>
+        </div>
+      </article>
+    </section>
+
+    <section class="grid two">
+      <article class="panel">
+        <div class="panel-head">
+          <div>
+            <div class="section-kicker">Device explorer</div>
+            <h3>Contoh daftar perangkat</h3>
+          </div>
+        </div>
+        <div id="deviceList" class="device-list"></div>
+      </article>
+
+      <article class="panel">
+        <div class="panel-head">
+          <div>
+            <div class="section-kicker">BGP summary</div>
+            <h3>Contoh panel peer BGP</h3>
+          </div>
+        </div>
+        <div id="bgpList" class="table-list"></div>
+      </article>
+    </section>
+
+    <section class="grid two">
+      <article class="panel">
+        <div class="panel-head">
+          <div>
+            <div class="section-kicker">Backup center</div>
+            <h3>Status backup konfigurasi</h3>
+          </div>
+        </div>
+        <div id="backupList" class="stack-list"></div>
+      </article>
+
+      <article class="panel">
+        <div class="panel-head">
+          <div>
+            <div class="section-kicker">Route explorer</div>
+            <h3>Flow pencarian route</h3>
+          </div>
+        </div>
+        <div class="route-box">
+          <label for="routeInput">Cari IP / prefix</label>
+          <div class="route-form">
+            <input id="routeInput" placeholder="Contoh: 103.196.85.0/24 atau 8.8.8.8" />
+            <button id="routeBtn">Simulasikan</button>
+          </div>
+          <div id="routeResult" class="result-card">Belum ada query. Nanti modul ini akan mencari route ke satu atau banyak router.</div>
+        </div>
+      </article>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head">
+        <div>
+          <div class="section-kicker">Roadmap live build</div>
+          <h3>Tahapan pengerjaan yang realistis</h3>
+        </div>
+      </div>
+      <div class="timeline">
+        <div class="timeline-item done"><strong>Phase 1</strong><span>MVP dashboard shell live + blueprint</span></div>
+        <div class="timeline-item active"><strong>Phase 2</strong><span>Device registry + connector skeleton + profile koneksi</span></div>
+        <div class="timeline-item"><strong>Phase 3</strong><span>MikroTik real integration: API, BGP, route, backup .rsc</span></div>
+        <div class="timeline-item"><strong>Phase 4</strong><span>SNMP multi-vendor & OLT adapters</span></div>
+        <div class="timeline-item"><strong>Phase 5</strong><span>Alerting, audit log, scheduling, retention backup</span></div>
+      </div>
+    </section>
+
+    <section class="panel muted-panel">
+      <div class="panel-head">
+        <div>
+          <div class="section-kicker">Catatan engineering</div>
+          <h3>Prinsip desain</h3>
+        </div>
+      </div>
+      <ul class="bullet-list">
+        <li>Port API per router wajib configurable dari dashboard.</li>
+        <li>SNMP version / port / security profile juga wajib configurable per device.</li>
+        <li>Backup OLT harus modular per vendor, tidak boleh diasumsikan seragam.</li>
+        <li>Hosting web app bisa tetap di subdomain ini, sementara collector berat bisa jalan di VM terpisah jika dibutuhkan.</li>
+        <li>Target akhir: usable real untuk NOC, bukan sekadar mockup cantik.</li>
+      </ul>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <span>NOC Dashboard MVP • Built for iterative live development</span>
+    <a href="./docs/blueprint-noc-dashboard.md" target="_blank" rel="noopener">Lihat blueprint markdown</a>
+  </footer>
+
+  <script src="./assets/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,28 @@
+{
+  "updatedAt": "2026-04-25T20:00:00Z",
+  "summary": {
+    "totalDevices": 12,
+    "up": 10,
+    "warning": 1,
+    "down": 1,
+    "backupsToday": 8,
+    "bgpPeers": 14
+  },
+  "devices": [
+    {"name":"MKR-BORDER-01","vendor":"MikroTik","type":"Router","site":"Core","status":"up","mode":"API+SNMP","apiPort":8728,"snmpPort":161},
+    {"name":"MKR-BORDER-02","vendor":"MikroTik","type":"Router","site":"Core","status":"warning","mode":"API+SNMP","apiPort":29031,"snmpPort":161},
+    {"name":"OLT-ZTE-C320-01","vendor":"ZTE","type":"OLT","site":"POP Donomulyo","status":"up","mode":"SNMP","apiPort":null,"snmpPort":1500},
+    {"name":"OLT-HSGQ-01","vendor":"HSGQ","type":"OLT","site":"POP Metro","status":"up","mode":"SNMP/CLI","apiPort":null,"snmpPort":161},
+    {"name":"SW-CORE-01","vendor":"Cisco","type":"Switch","site":"NOC Rack","status":"down","mode":"SNMP","apiPort":null,"snmpPort":161}
+  ],
+  "bgp": [
+    {"peer":"ID-IX-A","device":"MKR-BORDER-01","state":"Established","prefixIn":1245,"prefixOut":88},
+    {"peer":"TRANSIT-1","device":"MKR-BORDER-01","state":"Established","prefixIn":921,"prefixOut":54},
+    {"peer":"UPSTREAM-2","device":"MKR-BORDER-02","state":"Active","prefixIn":0,"prefixOut":0}
+  ],
+  "backups": [
+    {"device":"MKR-BORDER-01","type":"mikrotik-rsc","status":"success","time":"2026-04-25 19:40 UTC"},
+    {"device":"OLT-ZTE-C320-01","type":"olt-export","status":"queued","time":"2026-04-25 19:10 UTC"},
+    {"device":"MKR-BORDER-02","type":"mikrotik-rsc","status":"failed","time":"2026-04-25 18:50 UTC"}
+  ]
+}
